@@ -112,17 +112,20 @@ export default function CTScanPage() {
         }
         if (gradioResult) break
       }
+
+      if (!gradioResult) {
+        throw new Error('No result received from analysis')
+      }
       
       // Transform Gradio response
-      const data = gradioResult[0]
-      
+      // gradioResult is already the label object: {label: "Normal", confidences: [...]}
       const result = {
-        prediction: data.label,
-        confidence: data.confidences.find((c: any) => c.label === data.label)?.confidence || 0,
-        all_predictions: data.confidences.reduce((acc: any, curr: any) => {
+        prediction: gradioResult.label || 'Unknown',
+        confidence: gradioResult.confidences?.find((c: any) => c.label === gradioResult.label)?.confidence || 0,
+        all_predictions: gradioResult.confidences?.reduce((acc: any, curr: any) => {
           acc[curr.label] = curr.confidence
           return acc
-        }, {})
+        }, {}) || {}
       }
       
       // Store result and navigate to results page
