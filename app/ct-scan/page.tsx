@@ -57,9 +57,8 @@ export default function CTScanPage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_CT_SCAN_API || 'http://localhost:7860'
-      const hfToken = process.env.NEXT_PUBLIC_HF_TOKEN
       
-      // Convert file to base64 data URL for Gradio
+      // Convert file to base64 data URL (Gradio accepts base64)
       const reader = new FileReader()
       const base64Promise = new Promise<string>((resolve) => {
         reader.onload = (e) => resolve(e.target?.result as string)
@@ -67,20 +66,15 @@ export default function CTScanPage() {
       })
       const base64Image = await base64Promise
 
-      // Gradio /predict_image endpoint with authentication
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      }
-      
-      if (hfToken) {
-        headers['Authorization'] = `Bearer ${hfToken}`
-      }
-
-      const response = await fetch(`${apiUrl}/call/predict_image`, {
+      // Gradio API endpoint: /api/predict
+      const response = await fetch(`${apiUrl}/api/predict`, {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          data: [base64Image]
+          data: [base64Image],  // img_pil parameter
+          fn_index: 0  // First function (predict_image)
         }),
       })
 
@@ -91,14 +85,12 @@ export default function CTScanPage() {
       const eventData = await response.json()
       const eventId = eventData.event_id
       
-      // Poll for results with authentication
-      const resultResponse = await fetch(`${apiUrl}/call/predict_image/${eventId}`, {
-        headers: hfToken ? { 'Authorization': `Bearer ${hfToken}` } : {}
-      })
+      // Get results from streaming endpoint
+      const resultResponse = await fetch(`${apiUrl}/api/predict/${eventId}`)
       const reader2 = resultResponse.body?.getReader()
       const decoder = new TextDecoder()
       
-      let gradioResult
+      let gradioResult = null
       while (true) {
         const { done, value } = await reader2!.read()
         if (done) break
