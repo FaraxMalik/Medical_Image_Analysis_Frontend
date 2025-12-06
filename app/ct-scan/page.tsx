@@ -58,7 +58,7 @@ export default function CTScanPage() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_CT_SCAN_API || 'http://localhost:7860'
       
-      // Convert file to base64 data URL (Gradio accepts base64)
+      // Convert file to base64 data URL (Gradio accepts base64 in url field)
       const reader = new FileReader()
       const base64Promise = new Promise<string>((resolve) => {
         reader.onload = (e) => resolve(e.target?.result as string)
@@ -66,14 +66,22 @@ export default function CTScanPage() {
       })
       const base64Image = await base64Promise
 
-      // Gradio v6 API endpoint with api_prefix
+      // Gradio v6 API endpoint - send ImageData format
       const response = await fetch(`${apiUrl}/gradio_api/call/predict_image`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          data: [{ url: base64Image }]  // Send as ImageData object with url field
+          data: [{
+            path: null,
+            url: base64Image,  // Base64 data URL
+            size: file.size,
+            orig_name: file.name,
+            mime_type: file.type,
+            is_stream: false,
+            meta: { _type: "gradio.FileData" }
+          }]
         }),
       })
 
