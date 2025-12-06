@@ -180,12 +180,17 @@ export default function CTScanPage() {
       // gradioResult is already the label object: {label: "Normal", confidences: [...]}
       console.log('🔄 Transforming result...')
       const result = {
+        success: true,
         prediction: gradioResult.label || 'Unknown',
         confidence: gradioResult.confidences?.find((c: any) => c.label === gradioResult.label)?.confidence || 0,
-        all_predictions: gradioResult.confidences?.reduce((acc: any, curr: any) => {
+        all_scores: gradioResult.confidences?.reduce((acc: any, curr: any) => {
           acc[curr.label] = curr.confidence
           return acc
-        }, {}) || {}
+        }, {}) || {},
+        metadata: {
+          model: 'DenseNet121',
+          device: 'GPU'
+        }
       }
       console.log('✅ Final result:', result)
       console.log('✅ Final result:', result)
