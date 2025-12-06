@@ -56,21 +56,45 @@ export default function CTScanPage() {
     setError(null)
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-
       const apiUrl = process.env.NEXT_PUBLIC_CT_SCAN_API || 'http://localhost:7860'
       
-      const response = await fetch(`${apiUrl}/predict`, {
+      // Convert file to base64 for Gradio API
+      const reader = new FileReader()
+      const base64Promise = new Promise<string>((resolve) => {
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.readAsDataURL(file)
+      })
+      const base64Image = await base64Promise
+
+      // Gradio API format
+      const response = await fetch(`${apiUrl}/api/predict`, {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          data: [base64Image]
+        }),
       })
 
       if (!response.ok) {
         throw new Error('Analysis failed. Please try again.')
       }
 
-      const result = await response.json()
+      const gradioResult = await response.json()
+      
+      // Transform Gradio response to match our format
+      // Gradio returns: {data: [{label: "Class Name", confidences: [{label: "Class", confidence: 0.95}, ...]}]}
+      const data = gradioResult.data[0]
+      
+      const result = {
+        prediction: data.label,
+        confidence: data.confidences.find((c: any) => c.label === data.label)?.confidence || 0,
+        all_predictions: data.confidences.reduce((acc: any, curr: any) => {
+          acc[curr.label] = curr.confidence
+          return acc
+        }, {})
+      }
       
       // Store result and navigate to results page
       sessionStorage.setItem('ct-scan-result', JSON.stringify(result))
