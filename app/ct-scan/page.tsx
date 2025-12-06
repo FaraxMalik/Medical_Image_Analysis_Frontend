@@ -143,14 +143,21 @@ export default function CTScanPage() {
               const data = JSON.parse(jsonStr)
               console.log('📊 Parsed SSE data:', JSON.stringify(data, null, 2))
               
-              // Check for different message types
-              if (data.msg === 'process_completed' && data.output?.data) {
+              // Gradio can send data in different formats:
+              // 1. Wrapped format: {msg: 'process_completed', output: {data: [...]}}
+              // 2. Direct array format: [{label, confidences}]
+              
+              if (Array.isArray(data) && data.length > 0 && data[0].label) {
+                // Direct array format - this is what we're getting!
+                console.log('✅ Found result in direct array format')
+                gradioResult = data[0]
+                break
+              } else if (data.msg === 'process_completed' && data.output?.data) {
                 console.log('✅ Found result in process_completed')
                 gradioResult = data.output.data[0]
                 break
               } else if (data.msg === 'process_generating' && data.output?.data) {
                 console.log('⚡ Found result in process_generating')
-                // Some versions send results in generating message
                 gradioResult = data.output.data[0]
               }
             } catch (e) {
