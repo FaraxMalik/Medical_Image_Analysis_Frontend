@@ -58,7 +58,7 @@ export default function CTScanPage() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_CT_SCAN_API || 'http://localhost:7860'
       
-      // Convert file to base64 for Gradio API
+      // Convert file to base64 data URL for Gradio
       const reader = new FileReader()
       const base64Promise = new Promise<string>((resolve) => {
         reader.onload = (e) => resolve(e.target?.result as string)
@@ -66,8 +66,8 @@ export default function CTScanPage() {
       })
       const base64Image = await base64Promise
 
-      // Gradio API format
-      const response = await fetch(`${apiUrl}/api/predict`, {
+      // Gradio /predict_image endpoint format
+      const response = await fetch(`${apiUrl}/call/predict_image`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -81,11 +81,38 @@ export default function CTScanPage() {
         throw new Error('Analysis failed. Please try again.')
       }
 
-      const gradioResult = await response.json()
+      const eventData = await response.json()
       
-      // Transform Gradio response to match our format
-      // Gradio returns: {data: [{label: "Class Name", confidences: [{label: "Class", confidence: 0.95}, ...]}]}
-      const data = gradioResult.data[0]
+      // Gradio returns an event_id, we need to get the result
+      const eventId = eventData.event_id
+      
+      // Poll for results
+      const resultResponse = await fetch(`${apiUrl}/call/predict_image/${eventId}`)
+      const reader2 = resultResponse.body?.getReader()
+      const decoder = new TextDecoder()
+      
+      let gradioResult
+      while (true) {
+        const { done, value } = await reader2!.read()
+        if (done) break
+        
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n').filter(line => line.trim())
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6))
+            if (data.msg === 'process_completed') {
+              gradioResult = data.output.data
+              break
+            }
+          }
+        }
+        if (gradioResult) break
+      }
+      
+      // Transform Gradio response - it returns label object with confidences
+      const data = gradioResult[0]
       
       const result = {
         prediction: data.label,
