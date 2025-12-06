@@ -57,6 +57,7 @@ export default function CTScanPage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_CT_SCAN_API || 'http://localhost:7860'
+      console.log('🔧 API URL:', apiUrl)
       
       // Convert file to base64 data URL (Gradio accepts base64 in url field)
       const reader = new FileReader()
@@ -65,6 +66,20 @@ export default function CTScanPage() {
         reader.readAsDataURL(file)
       })
       const base64Image = await base64Promise
+      console.log('📸 Base64 image length:', base64Image.length)
+
+      const requestBody = {
+        data: [{
+          path: null,
+          url: base64Image,  // Base64 data URL
+          size: file.size,
+          orig_name: file.name,
+          mime_type: file.type,
+          is_stream: false,
+          meta: { _type: "gradio.FileData" }
+        }]
+      }
+      console.log('📤 Request body:', JSON.stringify(requestBody).substring(0, 500) + '...')
 
       // Gradio v6 API endpoint - send ImageData format
       const response = await fetch(`${apiUrl}/gradio_api/call/predict_image`, {
@@ -72,30 +87,28 @@ export default function CTScanPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          data: [{
-            path: null,
-            url: base64Image,  // Base64 data URL
-            size: file.size,
-            orig_name: file.name,
-            mime_type: file.type,
-            is_stream: false,
-            meta: { _type: "gradio.FileData" }
-          }]
-        }),
+        body: JSON.stringify(requestBody),
       })
 
+      console.log('📥 Call response status:', response.status)
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ Error response:', errorText)
         throw new Error('Analysis failed. Please try again.')
       }
 
       const eventData = await response.json()
+      console.log('🎫 Event data:', eventData)
       const eventId = eventData.event_id
       
       // Get results from SSE streaming endpoint
+      console.log('🌊 Starting SSE stream for event:', eventId)
       const resultResponse = await fetch(`${apiUrl}/gradio_api/call/predict_image/${eventId}`)
       
+      console.log('📥 Stream response status:', resultResponse.status)
       if (!resultResponse.ok) {
+        const errorText = await resultResponse.text()
+        console.error('❌ Stream error:', errorText)
         throw new Error('Failed to get prediction results')
       }
       
@@ -104,34 +117,44 @@ export default function CTScanPage() {
       
       let gradioResult = null
       let buffer = ''
+      let lineCount = 0
       
       while (true) {
         const { done, value } = await reader2!.read()
         
-        if (done) break
+        if (done) {
+          console.log('✅ Stream ended')
+          break
+        }
         
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''  // Keep incomplete line in buffer
         
         for (const line of lines) {
+          lineCount++
+          console.log(`📨 Line ${lineCount}:`, line.substring(0, 200))
+          
           if (line.startsWith('data:')) {
             try {
               const jsonStr = line.slice(5).trim()  // Remove 'data:' and trim
               if (!jsonStr) continue
               
               const data = JSON.parse(jsonStr)
+              console.log('📊 Parsed SSE data:', JSON.stringify(data, null, 2))
               
               // Check for different message types
               if (data.msg === 'process_completed' && data.output?.data) {
+                console.log('✅ Found result in process_completed')
                 gradioResult = data.output.data[0]
                 break
               } else if (data.msg === 'process_generating' && data.output?.data) {
+                console.log('⚡ Found result in process_generating')
                 // Some versions send results in generating message
                 gradioResult = data.output.data[0]
               }
             } catch (e) {
-              console.error('Failed to parse SSE data:', e)
+              console.error('❌ Failed to parse SSE data:', e, 'Line:', line)
             }
           }
         }
@@ -139,12 +162,16 @@ export default function CTScanPage() {
         if (gradioResult) break
       }
 
+      console.log('🎯 Final gradioResult:', gradioResult)
+      
       if (!gradioResult) {
+        console.error('❌ No result received - gradioResult is null')
         throw new Error('No result received from analysis')
       }
       
       // Transform Gradio response
       // gradioResult is already the label object: {label: "Normal", confidences: [...]}
+      console.log('🔄 Transforming result...')
       const result = {
         prediction: gradioResult.label || 'Unknown',
         confidence: gradioResult.confidences?.find((c: any) => c.label === gradioResult.label)?.confidence || 0,
@@ -153,14 +180,18 @@ export default function CTScanPage() {
           return acc
         }, {}) || {}
       }
+      console.log('✅ Final result:', result)
+      console.log('✅ Final result:', result)
       
       // Store result and navigate to results page
       sessionStorage.setItem('ct-scan-result', JSON.stringify(result))
       sessionStorage.setItem('ct-scan-image', preview!)
       
+      console.log('🚀 Navigating to results page...')
       router.push('/ct-scan/results')
 
     } catch (err) {
+      console.error('💥 Error in handleAnalyze:', err)
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setIsAnalyzing(false)
