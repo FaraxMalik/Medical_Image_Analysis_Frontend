@@ -66,14 +66,14 @@ export default function CTScanPage() {
       })
       const base64Image = await base64Promise
 
-      // Gradio API endpoint: /run/{api_name}
-      const response = await fetch(`${apiUrl}/run/predict_image`, {
+      // Gradio v6 API endpoint with api_prefix
+      const response = await fetch(`${apiUrl}/gradio_api/call/predict_image`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          data: [base64Image]
+          data: [{ url: base64Image }]  // Send as ImageData object with url field
         }),
       })
 
@@ -84,8 +84,8 @@ export default function CTScanPage() {
       const eventData = await response.json()
       const eventId = eventData.event_id
       
-      // Get results from streaming endpoint
-      const resultResponse = await fetch(`${apiUrl}/api/predict/${eventId}`)
+      // Get results from SSE streaming endpoint
+      const resultResponse = await fetch(`${apiUrl}/gradio_api/call/predict_image/${eventId}`)
       const reader2 = resultResponse.body?.getReader()
       const decoder = new TextDecoder()
       
@@ -95,14 +95,18 @@ export default function CTScanPage() {
         if (done) break
         
         const chunk = decoder.decode(value)
-        const lines = chunk.split('\n').filter(line => line.trim())
+        const lines = chunk.split('\n')
         
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6))
-            if (data.msg === 'process_completed') {
-              gradioResult = data.output.data
-              break
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.msg === 'process_completed') {
+                gradioResult = data.output.data[0]  // First element is the result
+                break
+              }
+            } catch (e) {
+              // Skip invalid JSON
             }
           }
         }
