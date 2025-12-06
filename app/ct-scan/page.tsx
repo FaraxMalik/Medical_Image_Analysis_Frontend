@@ -86,30 +86,48 @@ export default function CTScanPage() {
       
       // Get results from SSE streaming endpoint
       const resultResponse = await fetch(`${apiUrl}/gradio_api/call/predict_image/${eventId}`)
+      
+      if (!resultResponse.ok) {
+        throw new Error('Failed to get prediction results')
+      }
+      
       const reader2 = resultResponse.body?.getReader()
       const decoder = new TextDecoder()
       
       let gradioResult = null
+      let buffer = ''
+      
       while (true) {
         const { done, value } = await reader2!.read()
+        
         if (done) break
         
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''  // Keep incomplete line in buffer
         
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
+          if (line.startsWith('data:')) {
             try {
-              const data = JSON.parse(line.slice(6))
-              if (data.msg === 'process_completed') {
-                gradioResult = data.output.data[0]  // First element is the result
+              const jsonStr = line.slice(5).trim()  // Remove 'data:' and trim
+              if (!jsonStr) continue
+              
+              const data = JSON.parse(jsonStr)
+              
+              // Check for different message types
+              if (data.msg === 'process_completed' && data.output?.data) {
+                gradioResult = data.output.data[0]
                 break
+              } else if (data.msg === 'process_generating' && data.output?.data) {
+                // Some versions send results in generating message
+                gradioResult = data.output.data[0]
               }
             } catch (e) {
-              // Skip invalid JSON
+              console.error('Failed to parse SSE data:', e)
             }
           }
         }
+        
         if (gradioResult) break
       }
 
