@@ -57,6 +57,7 @@ export default function CTScanPage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_CT_SCAN_API || 'http://localhost:7860'
+      const hfToken = process.env.NEXT_PUBLIC_HF_TOKEN
       
       // Convert file to base64 data URL for Gradio
       const reader = new FileReader()
@@ -66,12 +67,18 @@ export default function CTScanPage() {
       })
       const base64Image = await base64Promise
 
-      // Gradio /predict_image endpoint format
+      // Gradio /predict_image endpoint with authentication
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      }
+      
+      if (hfToken) {
+        headers['Authorization'] = `Bearer ${hfToken}`
+      }
+
       const response = await fetch(`${apiUrl}/call/predict_image`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           data: [base64Image]
         }),
@@ -82,12 +89,12 @@ export default function CTScanPage() {
       }
 
       const eventData = await response.json()
-      
-      // Gradio returns an event_id, we need to get the result
       const eventId = eventData.event_id
       
-      // Poll for results
-      const resultResponse = await fetch(`${apiUrl}/call/predict_image/${eventId}`)
+      // Poll for results with authentication
+      const resultResponse = await fetch(`${apiUrl}/call/predict_image/${eventId}`, {
+        headers: hfToken ? { 'Authorization': `Bearer ${hfToken}` } : {}
+      })
       const reader2 = resultResponse.body?.getReader()
       const decoder = new TextDecoder()
       
@@ -111,7 +118,7 @@ export default function CTScanPage() {
         if (gradioResult) break
       }
       
-      // Transform Gradio response - it returns label object with confidences
+      // Transform Gradio response
       const data = gradioResult[0]
       
       const result = {
