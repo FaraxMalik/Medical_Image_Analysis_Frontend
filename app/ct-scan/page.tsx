@@ -66,15 +66,14 @@ export default function CTScanPage() {
       })
       const base64Image = await base64Promise
 
-      // Gradio API endpoint: /api/predict
-      const response = await fetch(`${apiUrl}/api/predict`, {
+      // Gradio API endpoint: /run/{api_name}
+      const response = await fetch(`${apiUrl}/run/predict_image`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          data: [base64Image],  // img_pil parameter
-          fn_index: 0  // First function (predict_image)
+          data: [base64Image]
         }),
       })
 
