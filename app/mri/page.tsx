@@ -136,10 +136,16 @@ export default function MRIPage() {
           lineCount++
           console.log(`📨 Line ${lineCount}:`, line.substring(0, 200))
           
+          // Check for error event
+          if (line.startsWith('event: error')) {
+            console.error('❌ Gradio API returned error event')
+            throw new Error('The MRI model encountered an error. Please check your Hugging Face Space logs.')
+          }
+          
           if (line.startsWith('data:')) {
             try {
               const jsonStr = line.slice(5).trim()  // Remove 'data:' and trim
-              if (!jsonStr) continue
+              if (!jsonStr || jsonStr === 'null') continue
               
               const data = JSON.parse(jsonStr)
               console.log('📊 Parsed SSE data:', JSON.stringify(data, null, 2))
