@@ -83,7 +83,7 @@ export default function MRIPage() {
       console.log('📤 Request body:', JSON.stringify(requestBody).substring(0, 500) + '...')
 
       // Gradio v6 API endpoint - send ImageData format
-      const response = await fetch(`${apiUrl}/gradio_api/call/predict`, {
+      const response = await fetch(`${apiUrl}/gradio_api/call/predict_image`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -104,7 +104,7 @@ export default function MRIPage() {
       
       // Get results from SSE streaming endpoint
       console.log('🌊 Starting SSE stream for event:', eventId)
-      const resultResponse = await fetch(`${apiUrl}/gradio_api/call/predict/${eventId}`)
+      const resultResponse = await fetch(`${apiUrl}/gradio_api/call/predict_image/${eventId}`)
       
       console.log('📥 Stream response status:', resultResponse.status)
       if (!resultResponse.ok) {
