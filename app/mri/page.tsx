@@ -119,6 +119,7 @@ export default function MRIPage() {
       let gradioResult = null
       let buffer = ''
       let lineCount = 0
+      let errorMessage = null
       
       while (true) {
         const { done, value } = await reader2!.read()
@@ -139,16 +140,33 @@ export default function MRIPage() {
           // Check for error event
           if (line.startsWith('event: error')) {
             console.error('❌ Gradio API returned error event')
-            throw new Error('The MRI model encountered an error. Please check your Hugging Face Space logs.')
+            errorMessage = 'The MRI model encountered an error during processing.'
+            continue
+          }
+
+          // Check for heartbeat (ignore)
+          if (line.startsWith('event: heartbeat')) {
+            continue
           }
           
           if (line.startsWith('data:')) {
             try {
               const jsonStr = line.slice(5).trim()  // Remove 'data:' and trim
-              if (!jsonStr || jsonStr === 'null') continue
+              if (!jsonStr || jsonStr === 'null') {
+                // If we got null data after error event, use error message
+                if (errorMessage) {
+                  throw new Error(errorMessage)
+                }
+                continue
+              }
               
               const data = JSON.parse(jsonStr)
               console.log('📊 Parsed SSE data:', JSON.stringify(data, null, 2))
+              
+              // Check for error in data
+              if (data && data.msg === 'process_completed' && data.success === false) {
+                throw new Error(data.output?.error || 'Model processing failed')
+              }
               
               // Handle different response formats from Gradio
               if (typeof data === 'string') {
@@ -170,12 +188,20 @@ export default function MRIPage() {
                 gradioResult = data.output.data[0]
               }
             } catch (e) {
+              if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
+                throw e  // Re-throw meaningful errors
+              }
               console.error('❌ Failed to parse SSE data:', e, 'Line:', line)
             }
           }
         }
         
         if (gradioResult) break
+      }
+
+      // If we got error event but no result, throw error
+      if (!gradioResult && errorMessage) {
+        throw new Error(errorMessage)
       }
 
       console.log('🎯 Final gradioResult:', gradioResult)
