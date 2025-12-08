@@ -58,6 +58,7 @@ export default function MRIPage() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_MRI_API || 'http://localhost:7860'
       console.log('🔧 MRI API URL:', apiUrl)
+      console.log('🔧 Environment check:', process.env.NEXT_PUBLIC_MRI_API ? 'Variable found' : 'Using fallback')
       
       // Convert file to base64 data URL (Gradio accepts base64 in url field)
       const reader = new FileReader()
